@@ -2,5 +2,14 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
   "python.terminal.activateEnvironment": true,
   "jupyter.askForKernelRestart": false,
-  "notebook.lineNumbers": "on"
+  "notebook.lineNumbers": "on",
+
+  // Exam practice: no auto-complete. Press Ctrl+Space if you ever want suggestions on purpose.
+  "editor.inlineSuggest.enabled": false,
+  "github.copilot.enable": { "*": false },
+  "editor.quickSuggestions": { "other": "off", "comments": "off", "strings": "off" },
+  "editor.suggestOnTriggerCharacters": false,
+  "editor.wordBasedSuggestions": "off",
+  "editor.acceptSuggestionOnEnter": "off",
+  "editor.parameterHints.enabled": false
 }
