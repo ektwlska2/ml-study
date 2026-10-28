@@ -591,3 +591,315 @@ def fig_compare_models():
             if j == 0:
                 axes[i, j].set_ylabel(dname)
     plt.tight_layout(); plt.show()
+
+
+# ------------------------------------------------------------------ table pictures (pandas, NumPy mechanics)
+KEY = {"A": "#cfe2f7", "B": "#fde2c8", "C": "#e4e4e4", "D": "#e6d8f2"}
+HL, NAN_BG, HDR = "#fff1a8", "#f8d0d0", "#e9edf2"
+
+
+def _table(ax, x0, y0, header, rows, cw=0.95, ch=0.42, colors=None, fs=9, index=None, title=None, tfs=10, bold_hdr=True):
+    """Draw a table whose top-left corner is (x0, y0); y grows downward. colors: {(r, c): facecolor}. Returns (width, height)."""
+    colors = colors or {}
+    cws = list(cw) if isinstance(cw, (list, tuple)) else [cw] * len(header)
+    xs = [x0]
+    for w in cws:
+        xs.append(xs[-1] + w)
+    if title:
+        ax.text(x0, y0 + 0.18, title, fontsize=tfs, fontweight="bold", va="bottom", family="monospace")
+    for c, h in enumerate(header):
+        ax.add_patch(plt.Rectangle((xs[c], y0 - ch), cws[c], ch, fc=HDR, ec="#9aa3ad", lw=0.8))
+        ax.text(xs[c] + cws[c] / 2, y0 - ch / 2, h, ha="center", va="center", fontsize=fs, fontweight="bold" if bold_hdr else "normal")
+    for r, row in enumerate(rows):
+        yy = y0 - (r + 2) * ch
+        for c, v in enumerate(row):
+            v = str(v)
+            fc = colors.get((r, c), NAN_BG if v == "NaN" else "white")
+            ax.add_patch(plt.Rectangle((xs[c], yy), cws[c], ch, fc=fc, ec="#9aa3ad", lw=0.8))
+            ax.text(xs[c] + cws[c] / 2, yy + ch / 2, v, ha="center", va="center", fontsize=fs, color="#b00020" if v == "NaN" else "k")
+        if index is not None:
+            ax.text(x0 - 0.12, yy + ch / 2, str(index[r]), ha="right", va="center", fontsize=fs - 1, color=GREY)
+    return xs[-1] - x0, (len(rows) + 1) * ch
+
+
+def _canvas(w, h, figsize):
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_xlim(0, w); ax.set_ylim(-h, 0.6); ax.axis("off")
+    return fig, ax
+
+
+def _arrow(ax, a, b, text=None, color="k", rad=0.0, fs=9, lw=1.4):
+    ax.annotate("", xy=b, xytext=a, arrowprops=dict(arrowstyle="-|>", color=color, lw=lw, connectionstyle=f"arc3,rad={rad}"))
+    if text:
+        ax.text((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.12, text, ha="center", va="bottom", fontsize=fs, color=color, fontweight="bold")
+
+
+PARTS6 = [["P01", "A", "day", "71.2"], ["P02", "A", "night", "74.8"], ["P03", "B", "day", "69.5"],
+          ["P04", "C", "night", "NaN"], ["P05", "B", "night", "77.1"], ["P06", "A", "day", "70.4"]]
+
+
+def fig_select():
+    """Five ways to pick from the first 6 rows of `parts`; the yellow cells are what you get back."""
+    panels = [
+        ('parts["temp"]', {(r, 3) for r in range(6)}, "ONE name → a Series (a single column)\nshape (6,)"),
+        ('parts[["part", "temp"]]', {(r, c) for r in range(6) for c in (0, 3)}, "a LIST of names → a DataFrame\nshape (6, 2)"),
+        ('parts.loc[0:2, ["part", "temp"]]', {(r, c) for r in range(3) for c in (0, 3)}, "loc = by LABEL. 0:2 means labels 0, 1, 2\n(the end label IS included) → shape (3, 2)"),
+        ("parts.iloc[0:2, 1:3]", {(r, c) for r in range(2) for c in (1, 2)}, "iloc = by POSITION, like NumPy. rows 0, 1 and\ncolumns 1, 2 (stops BEFORE 2 and 3) → shape (2, 2)"),
+        ('parts[(parts["shift"] == "night") & (parts["temp"] > 74)]', {(r, c) for r in (1, 4) for c in range(4)},
+         "a True/False mask keeps WHOLE rows where both\nconditions are True: P02 and P05 (P04's NaN > 74 is False)"),
+    ]
+    fig, axes = plt.subplots(2, 3, figsize=(15, 7.6))
+    for ax, (code, cells, note) in zip(axes.ravel(), panels):
+        ax.set_xlim(-0.5, 4.6); ax.set_ylim(-3.9, 0.9); ax.axis("off")
+        _table(ax, 0.3, 0, ["part", "line", "shift", "temp"], PARTS6, cw=1.0, colors={k: HL for k in cells}, index=range(6))
+        for c in range(4):
+            ax.text(0.3 + c + 0.5, 0.08, f"col {c}", ha="center", va="bottom", fontsize=7, color=GREY)
+        ax.text(-0.25, 0.08, "label", ha="center", va="bottom", fontsize=7, color=GREY)
+        ax.set_title(code, fontsize=9.5, family="monospace", fontweight="bold", loc="left")
+        ax.text(0.3, -3.1, note, fontsize=9, va="top")
+    ax = axes.ravel()[5]; ax.axis("off")
+    ax.text(0.02, 0.85, "How to read these pictures", fontsize=11, fontweight="bold", transform=ax.transAxes)
+    ax.text(0.02, 0.78, "• Each panel is the same table: the first 6 rows of parts.\n• Grey numbers on the left are the row LABELS (the index).\n"
+            "• Grey 'col 0 … col 3' are column POSITIONS.\n• Yellow cells = what the line of code returns.\n\n"
+            "loc vs iloc: here labels and positions happen\nto be equal. After sort_values they are not:\nloc follows the labels, iloc the positions.",
+            fontsize=9.5, va="top", transform=ax.transAxes)
+    plt.tight_layout(); plt.show()
+
+
+PARTS12 = [["P01", "A", "71.2"], ["P02", "A", "74.8"], ["P03", "B", "69.5"], ["P04", "C", "NaN"], ["P05", "B", "77.1"], ["P06", "A", "70.4"],
+           ["P07", "C", "72.9"], ["P08", "B", "79.3"], ["P09", "C", "68.8"], ["P10", "A", "75.6"], ["P11", "B", "70.1"], ["P12", "C", "73.4"]]
+
+
+def _key_colors(rows, col):
+    return {(r, c): KEY[row[col]] for r, row in enumerate(rows) for c in range(len(row))}
+
+
+def fig_groupby():
+    """groupby("line")["temp"].mean() in three stages: split the rows, average each group, put the answers together."""
+    fig, ax = _canvas(15.5, 8.6, (15.5, 8.6))
+    _table(ax, 0.4, 0, ["part", "line", "temp"], PARTS12, cw=0.95, colors=_key_colors(PARTS12, 1), title="parts (12 rows)")
+    groups = {g: [r for r in PARTS12 if r[1] == g] for g in "ABC"}
+    calc = {"A": "(71.2 + 74.8 + 70.4 + 75.6) / 4 = 73.0", "B": "(69.5 + 77.1 + 79.3 + 70.1) / 4 = 74.0",
+            "C": "(72.9 + 68.8 + 73.4) / 3 = 71.7\nNaN is skipped: 3 values, not 4"}
+    y = 0
+    for g in "ABC":
+        _table(ax, 5.0, y, ["part", "line", "temp"], groups[g], cw=0.95, colors=_key_colors(groups[g], 1), title=f"group {g}")
+        ax.text(8.1, y - 1.25, f"mean of temp:\n{calc[g]}", fontsize=9, va="center")
+        y -= 2.9
+    _table(ax, 12.6, -2.6, ["line", "temp"], [["A", "73.0"], ["B", "74.0"], ["C", "71.7"]], cw=1.0,
+           colors={(r, c): KEY["ABC"[r]] for r in range(3) for c in range(2)}, title="result: one row per group")
+    _arrow(ax, (3.4, -2.6), (4.8, -1.0), "1. SPLIT", rad=-0.15)
+    _arrow(ax, (3.4, -2.6), (4.8, -3.9), rad=0.0)
+    _arrow(ax, (3.4, -2.6), (4.8, -6.8), rad=0.15)
+    ax.text(8.1, 0.45, "2. APPLY .mean() to each group", fontsize=10, fontweight="bold")
+    for yy in (-1.25, -4.15, -7.05):
+        _arrow(ax, (11.4, yy), (12.5, -3.4), rad=0.0, lw=1.0)
+    ax.text(12.6, -0.95, "3. COMBINE", fontsize=10, fontweight="bold")
+    plt.show()
+
+
+def fig_transform():
+    """.mean() gives one row per group; .transform("mean") writes each group's mean back onto every row."""
+    fig, ax = _canvas(12.5, 6.0, (12.5, 6.2))
+    means = {"A": "73.0", "B": "74.0", "C": "71.7"}
+    rows = [r + [means[r[1]]] for r in PARTS12]
+    cols = _key_colors(rows, 1)
+    _table(ax, 0.4, 0, ["part", "line", "temp", "transform(\"mean\")"], rows, cw=[0.95, 0.95, 0.95, 1.9], colors=cols,
+           title='parts.groupby("line")["temp"].transform("mean")')
+    _table(ax, 7.6, -1.6, ["line", "mean()"], [["A", "73.0"], ["B", "74.0"], ["C", "71.7"]], cw=1.0,
+           colors={(r, c): KEY["ABC"[r]] for r in range(3) for c in range(2)}, title='...["temp"].mean()')
+    ax.text(7.6, -3.6, "mean():  3 rows, one per group.\n\ntransform(\"mean\"):  12 rows, the same as parts.\nEvery row gets ITS OWN group's mean,\n"
+            "so it can sit next to the original column.\n\nThat's what fillna needs: P04 (line C)\nis missing, so it gets line C's 71.7.", fontsize=9.5, va="top")
+    plt.show()
+
+
+MERGE_LEFT = [["P01", "A"], ["P02", "A"], ["P03", "B"], ["P04", "C"]]
+MERGE_RIGHT = [["A", "Kim"], ["B", "Lee"], ["D", "Park"]]
+
+
+def fig_merge():
+    """merge(on="line"): every row of the left table looks up its line in the right table."""
+    fig, ax = _canvas(15.5, 7.6, (15.5, 7.9))
+    lc = {(r, c): KEY[row[1]] for r, row in enumerate(MERGE_LEFT) for c in range(2)}
+    rc = {(r, c): KEY[row[0]] for r, row in enumerate(MERGE_RIGHT) for c in range(2)}
+    _table(ax, 1.0, 0, ["part", "line"], MERGE_LEFT, cw=1.0, colors=lc, title="left table: small")
+    _table(ax, 7.0, 0, ["line", "supervisor"], MERGE_RIGHT, cw=[1.0, 1.4], colors=rc, title="right table: lines")
+    ch = 0.42
+    yrow = lambda r: -(r + 1.5) * ch
+    for r, (_, key) in enumerate(MERGE_LEFT):
+        match = [i for i, row in enumerate(MERGE_RIGHT) if row[0] == key]
+        if match:
+            _arrow(ax, (3.05, yrow(r)), (6.95, yrow(match[0])), color="#2e7d32", lw=1.2)
+        else:
+            ax.text(3.2, yrow(r), "✗ no line C on the right", color="#b00020", fontsize=9, va="center")
+    ax.text(9.6, yrow(2), "← no part has line D:\n    nobody looks it up", color="#6a3d9a", fontsize=9, va="center")
+    ax.text(1.0, -2.75, 'Each row of the LEFT table takes its "line" and looks it up in the RIGHT table (green arrows).\n'
+            "A match glues the two rows together. The question is what to do with rows that find no partner.", fontsize=10, va="top")
+    results = [
+        ('how="inner"', [["P01", "A", "Kim"], ["P02", "A", "Kim"], ["P03", "B", "Lee"]],
+         "keep only rows that found a partner:\nP04 (line C) is dropped,\nPark (line D) never appears."),
+        ('how="left"', [["P01", "A", "Kim"], ["P02", "A", "Kim"], ["P03", "B", "Lee"], ["P04", "C", "NaN"]],
+         "keep EVERY left row:\nP04 stays, with supervisor NaN.\nPark still doesn't appear."),
+        ('how="outer"', [["P01", "A", "Kim"], ["P02", "A", "Kim"], ["P03", "B", "Lee"], ["P04", "C", "NaN"], ["NaN", "D", "Park"]],
+         "keep every row of BOTH tables:\nNaN wherever a side is missing."),
+    ]
+    for k, (name, rows, note) in enumerate(results):
+        x = 0.4 + 5.2 * k
+        cols = {(r, c): KEY[row[1]] for r, row in enumerate(rows) for c in range(3) if row[c] != "NaN"}
+        _table(ax, x, -4.4, ["part", "line", "supervisor"], rows, cw=[1.0, 0.9, 1.4], colors=cols, title=f"small.merge(lines, on=\"line\", {name})", tfs=8.5)
+        ax.text(x, -4.4 - (len(rows) + 1) * ch - 0.25, note, fontsize=9, va="top")
+    plt.show()
+
+
+def fig_pivot():
+    """pivot_table: the (line, shift) pairs of a long list become the rows and columns of a grid."""
+    fig, ax = _canvas(12.0, 4.4, (12, 4.6))
+    long_rows = [["A", "day", "0"], ["A", "night", "2"], ["B", "day", "0"], ["B", "night", "2"], ["C", "day", "0"], ["C", "night", "0"]]
+    sc = {"day": "#d7e6f6", "night": "#fbe3cf"}
+    _table(ax, 0.4, 0, ["line", "shift", "defects"], long_rows, cw=1.0, colors={(r, c): sc[row[1]] for r, row in enumerate(long_rows) for c in range(3)},
+           title="long: one row per (line, shift) pair")
+    grid = [["A", "0", "2"], ["B", "0", "2"], ["C", "0", "0"]]
+    gc = {(r, 1): sc["day"] for r in range(3)} | {(r, 2): sc["night"] for r in range(3)}
+    _table(ax, 6.4, -0.6, ["line", "day", "night"], grid, cw=1.0, colors=gc, title="grid: lines down, shifts across")
+    _arrow(ax, (3.7, -1.6), (6.2, -1.6), "pivot_table", rad=0.0)
+    ax.text(6.4, -2.8, 'index="line"  → the rows\ncolumns="shift" → the columns\nvalues="defect", aggfunc="sum" → the number in each cell\n'
+            "e.g. the long row (A, night, 2) becomes the cell row A, column night", fontsize=9, va="top")
+    plt.show()
+
+
+# ------------------------------------------------------------------ notebook 00: frozen gradient
+def fig_frozen_gradient():
+    x = np.array([1.0, 2.0, 3.0]); y = 2 * x; eta = 0.05
+    L = lambda w: np.mean((w * x - y) ** 2)
+    g = lambda w: 2 / 3 * np.sum(x * (w * x - y))
+    good, bad = [0.0], [0.0]
+    for _ in range(6):
+        good.append(good[-1] - eta * g(good[-1])); bad.append(bad[-1] - eta * g(0.0))
+    ws = np.linspace(-0.5, 6.2, 300)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.2), sharey=True)
+    for ax, path, title, col in [(axes[0], good, "gradient INSIDE the loop: the slope is re-measured at every step", "#2e7d32"),
+                                 (axes[1], bad, "gradient computed ONCE: the slope at w = 0 is reused forever", "#b00020")]:
+        ax.plot(ws, [L(w) for w in ws], color=GREY, lw=1.5)
+        ax.axvline(2, color=GREY, ls=":", lw=1); ax.text(2.05, 70, "best w = 2", fontsize=8, color=GREY)
+        for k in range(len(path) - 1):
+            ax.annotate("", xy=(path[k + 1], L(path[k + 1])), xytext=(path[k], L(path[k])), arrowprops=dict(arrowstyle="-|>", color=col, lw=1.3))
+        ax.plot(path, [L(w) for w in path], "o", color=col, ms=5)
+        for k, w in enumerate(path):
+            ax.annotate(str(k), (w, L(w)), xytext=(0, 7), textcoords="offset points", fontsize=7, ha="center")
+        ax.set_title(title, fontsize=9.5); ax.set_xlabel("$w$"); ax.set_ylim(-2, 80)
+    axes[0].set_ylabel("loss $L(w)$")
+    plt.tight_layout(); plt.show()
+
+
+# ------------------------------------------------------------------ notebook 02: kNN mechanics
+def fig_broadcast_distances():
+    X = KNN_TRAIN; q = np.array([3.5, 3.0]); D = X - q; S = D ** 2; s = S.sum(axis=1); d = np.sqrt(s)
+    fmt = lambda a: [[f"{v:g}" for v in row] for row in a]
+    fig, ax = _canvas(18.6, 4.0, (18.6, 4.3))
+    row0 = lambda ncol: {(0, c): HL for c in range(ncol)}
+    blocks = [(0.2, "X_train (6, 2)", ["x1", "x2"], fmt(X), row0(2)),
+              (2.9, "q copied down (6, 2)", ["x1", "x2"], fmt(np.tile(q, (6, 1))), {**{(r, c): "#f1f1f1" for r in range(1, 6) for c in range(2)}, **row0(2)}),
+              (5.6, "difference (6, 2)", ["x1", "x2"], fmt(D), row0(2)),
+              (8.3, "squared (6, 2)", ["x1", "x2"], fmt(S), row0(2)),
+              (11.0, ".sum(axis=1) (6,)", ["sum"], [[f"{v:g}"] for v in s], row0(1)),
+              (13.1, "np.sqrt (6,)", ["dist"], [[f"{v:.3f}"] for v in d], row0(1))]
+    for x0, title, hdr, rows, cols in blocks:
+        _table(ax, x0, 0, hdr, rows, cw=0.95 if len(hdr) == 2 else 1.1, colors=cols, title=title, tfs=9)
+    for xa, sym in [(2.3, "−"), (5.0, "="), (7.75, "**2"), (10.45, "→"), (12.55, "→")]:
+        ax.text(xa + 0.15, -1.5, sym, fontsize=15, ha="center", va="center", fontweight="bold")
+    ax.text(15.0, -0.4, "Yellow = row 0, followed\nthrough every step:\n\n(1, 2) − (3.5, 3) = (−2.5, −1)\n"
+            "squares: 6.25 and 1\nsum: 7.25\nsqrt: 2.693", fontsize=9, va="top")
+    ax.text(0.2, -3.35, "q has shape (2,) and X_train has (6, 2). Lined up from the right, 2 matches 2, so NumPy reuses q for every row\n"
+            "(grey: copies that are never actually made in memory). sum(axis=1) adds ACROSS each row, so the column axis disappears.",
+            fontsize=9, va="top")
+    plt.show()
+
+
+def fig_argsort(dist=(2.693, 2.5, 1.5, 1.803, 2.062, 3.905), k=3):
+    dist = np.array(dist); order = np.argsort(dist)
+    fig, ax = _canvas(12.5, 3.1, (12.5, 3.3))
+    cw, ch = 1.25, 0.5
+    for p, v in enumerate(dist):
+        ax.add_patch(plt.Rectangle((1.6 + p * cw, -ch), cw, ch, fc="white", ec="#9aa3ad"))
+        ax.text(1.6 + p * cw + cw / 2, -ch / 2, f"{v:g}", ha="center", va="center", fontsize=10)
+        ax.text(1.6 + p * cw + cw / 2, 0.1, f"position {p}", ha="center", va="bottom", fontsize=8, color=GREY)
+    ax.text(0.1, -ch / 2, "dist", fontsize=10, fontweight="bold", va="center", family="monospace")
+    y2 = -2.4
+    for rank, p in enumerate(order):
+        fc = HL if rank < k else "white"
+        ax.add_patch(plt.Rectangle((1.6 + rank * cw, y2), cw, ch, fc=fc, ec="#9aa3ad"))
+        ax.text(1.6 + rank * cw + cw / 2, y2 + ch / 2, str(p), ha="center", va="center", fontsize=11, fontweight="bold")
+        ax.text(1.6 + rank * cw + cw / 2, y2 - 0.08, f"({dist[p]:g})", ha="center", va="top", fontsize=8, color=GREY)
+        _arrow(ax, (1.6 + p * cw + cw / 2, -ch - 0.05), (1.6 + rank * cw + cw / 2, y2 + ch + 0.05), color="#7a8794", lw=0.9)
+    ax.text(0.1, y2 + ch / 2, "argsort", fontsize=10, fontweight="bold", va="center", family="monospace")
+    ax.text(1.6 + 6 * cw + 0.3, y2 + ch / 2, f"← the POSITIONS, smallest distance first.\n   Yellow = [:{k}] → the {k} nearest: rows {order[:k].tolist()}",
+            fontsize=9, va="center")
+    plt.show()
+
+
+def fig_fancy_index(y=(0, 0, 0, 1, 1, 1), idx=(2, 3, 4)):
+    fig, ax = _canvas(11.0, 3.4, (11, 3.6))
+    cw, ch = 1.0, 0.5
+    for p, v in enumerate(y):
+        ax.add_patch(plt.Rectangle((2.0 + p * cw, -ch), cw, ch, fc=HL if p in idx else "white", ec="#9aa3ad"))
+        ax.text(2.0 + p * cw + cw / 2, -ch / 2, str(v), ha="center", va="center", fontsize=11)
+        ax.text(2.0 + p * cw + cw / 2, 0.1, f"pos {p}", ha="center", va="bottom", fontsize=8, color=GREY)
+    ax.text(0.1, -ch / 2, "y_train", fontsize=10, fontweight="bold", va="center", family="monospace")
+    y2 = -2.4
+    for j, p in enumerate(idx):
+        ax.add_patch(plt.Rectangle((3.0 + j * cw, y2), cw, ch, fc=HL, ec="#9aa3ad"))
+        ax.text(3.0 + j * cw + cw / 2, y2 + ch / 2, str(y[p]), ha="center", va="center", fontsize=11, fontweight="bold")
+        ax.text(3.0 + j * cw + cw / 2, y2 - 0.08, f"y_train[{p}]", ha="center", va="top", fontsize=8, color=GREY)
+        _arrow(ax, (2.0 + p * cw + cw / 2, -ch - 0.05), (3.0 + j * cw + cw / 2, y2 + ch + 0.05), color="#7a8794", lw=0.9)
+    ax.text(0.1, y2 + ch / 2, f"y_train[{list(idx)}]", fontsize=9, fontweight="bold", va="center", family="monospace")
+    ax.text(6.4, y2 + ch / 2, "← one label per neighbor, in the order of idx\n    shape (3,)", fontsize=9, va="center")
+    plt.show()
+
+
+def fig_bincount(labels=(0, 1, 1)):
+    labels = np.array(labels); counts = np.bincount(labels)
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 3.2), gridspec_kw={"width_ratios": [1, 1.2]})
+    a1.axis("off"); a1.set_xlim(0, 4); a1.set_ylim(-1.5, 1)
+    for j, v in enumerate(labels):
+        a1.add_patch(plt.Rectangle((0.5 + j, -0.25), 1, 0.5, fc=C1 if v == 1 else C0, ec="k", alpha=0.75))
+        a1.text(1.0 + j, 0, str(v), ha="center", va="center", fontsize=12, color="white", fontweight="bold")
+    a1.set_title("labels of the 3 nearest", fontsize=10, family="monospace")
+    a2.bar(range(len(counts)), counts, color=[C0, C1][:len(counts)], edgecolor="k")
+    for c, n in enumerate(counts):
+        a2.text(c, n + 0.05, f"count of {c}s = {n}", ha="center", va="bottom", fontsize=9)
+    a2.set_xticks(range(len(counts))); a2.set_xticklabels([f"position {c}\n(label {c})" for c in range(len(counts))])
+    a2.set_ylim(0, counts.max() + 0.8); a2.set_yticks([])
+    a2.set_title(f"np.bincount → {counts.tolist()}   .argmax() → {counts.argmax()} (the tallest bar)", fontsize=10, family="monospace")
+    plt.tight_layout(); plt.show()
+
+
+# ------------------------------------------------------------------ notebook 04: the small tree, drawn by scikit-learn
+def fig_small_tree():
+    from sklearn.tree import DecisionTreeClassifier, plot_tree
+    X = np.column_stack([[68, 70, 71, 72, 73, 74, 75, 77, 78, 80], [0, 0, 1, 0, 1, 0, 1, 1, 0, 1]])
+    y = np.array([0, 0, 0, 0, 1, 0, 1, 1, 0, 1])
+    m = DecisionTreeClassifier(max_depth=2, random_state=0).fit(X, y)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    plot_tree(m, feature_names=["temp", "night"], class_names=["OK", "defect"], filled=True, impurity=True, rounded=True, fontsize=10, ax=ax)
+    ax.set_title("Read from the top. Each box: the question, its Gini, how many parts reach it,\n[how many OK, how many defective], and the majority class. Left (True) = yes, right (False) = no.\n\"night <= 0.5\" is True for day-shift parts (night = 0).", fontsize=10)
+    plt.show()
+
+
+# ------------------------------------------------------------------ notebook 06: bootstrap samples
+def fig_bootstrap(n=10, B=5, seed=3):
+    rng = np.random.default_rng(seed)
+    counts = np.array([np.bincount(rng.integers(0, n, size=n), minlength=n) for _ in range(B)])
+    fig, ax = plt.subplots(figsize=(10, 3.6))
+    ax.imshow(np.where(counts == 0, np.nan, counts), cmap="Oranges", vmin=0, vmax=4, aspect="auto")
+    for b in range(B):
+        for j in range(n):
+            c = counts[b, j]
+            ax.text(j, b, "out" if c == 0 else f"×{c}", ha="center", va="center", fontsize=9, color=GREY if c == 0 else "k")
+        ax.text(n - 0.3, b, f"   {np.mean(counts[b] > 0):.0%} of the rows used", va="center", fontsize=9)
+    ax.set_xticks(range(n)); ax.set_xticklabels([f"row {j}" for j in range(n)], fontsize=8)
+    ax.set_yticks(range(B)); ax.set_yticklabels([f"sample {b + 1}" for b in range(B)])
+    ax.set_xticks(np.arange(-0.5, n), minor=True); ax.set_yticks(np.arange(-0.5, B), minor=True)
+    ax.grid(which="minor", color="white", lw=2); ax.grid(which="major", visible=False); ax.tick_params(which="minor", length=0)
+    ax.set_xlim(-0.5, n + 2.2)
+    ax.set_title("5 bootstrap samples of 10 rows: ×2 = drawn twice, out = never drawn (out-of-bag for that tree)", fontsize=10)
+    plt.tight_layout(); plt.show()
