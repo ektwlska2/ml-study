@@ -250,7 +250,18 @@ def _t8():
     p = PCA(k).fit(X); R = p.transform(X)
     return bool(ok) and Z.shape == R.shape and _same_dirs(C.T, p.components_.T) and all(np.isclose(abs(Z[:, j] @ R[:, j]), R[:, j] @ R[:, j]) for j in range(k))
 
-TESTS = {i: globals()[f"_t{i}"] for i in range(1, 9)}
+def _t9():
+    m = _need(MyPCA(1).fit(XP))
+    ok = np.allclose(m.mean_, [5, 4]) and np.shape(m.components_) == (1, 2) and np.isclose(abs(m.components_[0] @ np.array([1, 1]) / np.sqrt(2)), 1)
+    Z = _need(m.transform(np.array([[7.0, 7.0]])))
+    ok = ok and np.allclose(np.abs(Z), [[3.5355]], atol=1e-3) and np.allclose(m.inverse_transform(Z), [[7.5, 6.5]])
+    from sklearn.decomposition import PCA
+    X = _X(); k = int(_rng.integers(1, X.shape[1] + 1)); mine = MyPCA(k).fit(X); ref = PCA(k).fit(X)
+    T = _rng.normal(size=(5, X.shape[1])); A, B = mine.transform(T), ref.transform(T)
+    return (bool(ok) and np.allclose(mine.explained_variance_, ref.explained_variance_) and A.shape == B.shape
+            and all(np.allclose(np.abs(A[:, j]), np.abs(B[:, j])) for j in range(k)) and np.allclose(mine.inverse_transform(A), ref.inverse_transform(B)))
+
+TESTS = {i: globals()[f"_t{i}"] for i in range(1, 10)}
 ''',
 "03": r'''
 _rng = np.random.default_rng()
@@ -318,7 +329,31 @@ def _t6():
         return bool(ok)
     return bool(ok) and np.isclose(silhouette_point(X, lab, i), ref[i])
 
-TESTS = {i: globals()[f"_t{i}"] for i in range(1, 7)}
+def _ref_km(X, C, iters=100):
+    C = C.copy(); lab = _assign(X, C)
+    for _ in range(iters):
+        C = np.array([X[lab == j].mean(0) for j in range(len(C))]); new = _assign(X, C)
+        if np.array_equal(new, lab):
+            break
+        lab = new
+    return C, lab
+
+def _t7():
+    km = _need(MyKMeans(np.array([[1, 1], [2, 1.0]])).fit(XK))
+    ok = np.allclose(km.cluster_centers_, [[4 / 3, 4 / 3], [14 / 3, 10 / 3]]) and np.array_equal(km.labels_, [0, 0, 0, 1, 1, 1]) and np.isclose(km.inertia_, 8 / 3)
+    ok = ok and np.array_equal(_need(km.predict(np.array([[3.5, 2.0], [0.0, 0.0]]))), [1, 0])
+    for _ in range(5):
+        X, k = _blobs(); C0 = X[_rng.choice(len(X), k, replace=False)].copy()
+        with np.errstate(all="ignore"):
+            Cr, lr_ = _ref_km(X, C0)
+        if np.isnan(Cr).any() or any(np.sum(lr_ == j) == 0 for j in range(k)):
+            continue
+        mine = MyKMeans(C0.copy()).fit(X); T = _rng.normal(0, 6, (8, X.shape[1]))
+        ok = ok and np.allclose(mine.cluster_centers_, Cr) and np.array_equal(mine.labels_, lr_) and np.array_equal(mine.predict(T), _assign(T, Cr))
+        ok = ok and np.isclose(mine.inertia_, ((X - Cr[lr_]) ** 2).sum())
+    return bool(ok)
+
+TESTS = {i: globals()[f"_t{i}"] for i in range(1, 8)}
 ''',
 "04": r'''
 _rng = np.random.default_rng()
@@ -379,7 +414,44 @@ def _t6():
     ref = np.log(sum(pi[k] * _npdf(x, mu[k], var[k]) for k in range(2))).sum()
     return bool(ok) and np.isclose(log_likelihood(x, mu, var, pi), ref)
 
-TESTS = {i: globals()[f"_t{i}"] for i in range(1, 7)}
+def _t7():
+    X = np.array([1, 1.5, 2, 2.5, 5, 8, 8.5, 9, 12.0])[:, None]; lab = np.array([0, 0, 0, 0, -1, 1, 1, 1, -1])
+    core = np.array([False, True, True, False, False, False, True, False, False])
+    outs = [_need(dbscan_predict(X, lab, core, np.array([v]), 0.6)) for v in (1.9, 2.8, 8.9, 6.5)]
+    ok = [int(o) for o in outs] == [0, -1, 1, -1]
+    from sklearn.cluster import DBSCAN
+    Y = np.r_[_rng.normal(0, 0.3, (20, 2)), _rng.normal(4, 0.3, (20, 2))]; eps = 0.5; m = DBSCAN(eps=eps, min_samples=4).fit(Y)
+    cm = np.zeros(len(Y), bool); cm[m.core_sample_indices_] = True
+    for _ in range(10):
+        q = _rng.uniform(-1, 5, 2); d = np.sqrt(((Y - q) ** 2).sum(1)); cand = cm & (d <= eps)
+        ref = m.labels_[cand][np.argmin(d[cand])] if cand.any() else -1
+        ok = ok and int(dbscan_predict(Y, m.labels_, cm, q, eps)) == ref
+    return bool(ok)
+
+def _t8():
+    from sklearn.cluster import DBSCAN
+    from sklearn.metrics import adjusted_rand_score
+    X = np.array([1, 1.5, 2, 2.5, 5, 8, 8.5, 9, 12.0])[:, None]
+    ok = np.array_equal(_need(dbscan(X, 0.6, 3)), [0, 0, 0, 0, -1, 1, 1, 1, -1])
+    for _ in range(5):
+        k = int(_rng.integers(2, 4)); C = np.array([[0, 0], [10, 0], [0, 10]])[:k] + _rng.uniform(-1, 1, (k, 2))     # well apart: no shared border points
+        Y = np.r_[np.concatenate([c + _rng.normal(0, 0.4, (int(_rng.integers(10, 25)), 2)) for c in C]), _rng.uniform(-3, 23, (5, 2))]
+        out = np.asarray(dbscan(Y, 0.6, 4)); ref = DBSCAN(eps=0.6, min_samples=4).fit(Y).labels_
+        ok = ok and out.shape == ref.shape and np.array_equal(out < 0, ref < 0) and adjusted_rand_score(ref, out) == 1.0
+    return bool(ok)
+
+def _t9():
+    x = XG1; m0, v0, p0 = np.array([2.0, 5.0]), np.array([4.0, 4.0]), np.array([0.5, 0.5])
+    mu, var, pi = _need(gmm_fit_1d(x, m0.copy(), v0.copy(), p0.copy(), 1))
+    ok = np.allclose(mu, [2.324, 6.0], atol=2e-3)
+    y = np.r_[_rng.normal(0, 1, 15), _rng.normal(5, 1.5, 15)]; it = int(_rng.integers(1, 30))
+    a, b, c = np.array([-1.0, 3.0]), np.array([1.0, 1.0]), np.array([0.5, 0.5])
+    for _ in range(it):
+        R = _resp(y, a, b, c); Nk = R.sum(0); a = (R * y[:, None]).sum(0) / Nk; b = (R * (y[:, None] - a) ** 2).sum(0) / Nk; c = Nk / len(y)
+    r1, r2, r3 = gmm_fit_1d(y, np.array([-1.0, 3.0]), np.array([1.0, 1.0]), np.array([0.5, 0.5]), it)
+    return bool(ok) and np.allclose(r1, a) and np.allclose(r2, b) and np.allclose(r3, c)
+
+TESTS = {i: globals()[f"_t{i}"] for i in range(1, 10)}
 ''',
 "05": r'''
 import pandas as pd
@@ -433,7 +505,82 @@ def _t4():
     p2, r2 = precision_recall_at(y, s, t)
     return bool(ok) and np.isclose(p2, tp / pred.sum()) and np.isclose(r2, tp / (y == 1).sum())
 
-TESTS = {1: _t2, 2: _t1, 3: _t3, 4: _t4}
+def _t5():
+    from sklearn.compose import ColumnTransformer
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+    d = _frame(80); yy = (_rng.random(80) < 0.4).astype(int); yy[:2] = [0, 1]
+    numc, catc = ["temp", "vibration", "pressure"], ["shift", "line"]
+    pre = ColumnTransformer([("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), numc), ("cat", OneHotEncoder(handle_unknown="ignore"), catc)])
+    model = make_pipeline(pre, LogisticRegression(max_iter=2000)).fit(d, yy)
+    ok = True
+    for _ in range(6):
+        part = _frame(1)
+        if _rng.random() < 0.3:
+            part.loc[0, "temp"] = np.nan
+        if _rng.random() < 0.2:
+            part.loc[0, "line"] = "Z"
+        out = _need(score_by_hand(model, part))
+        ok = ok and np.isclose(float(out), model.predict_proba(part)[0, 1])
+    return bool(ok)
+
+def _t6():
+    A = np.array([[2.0, 1.0], [0.0, 2.0]]); y = np.array([1, 0])
+    w, b = _need(logistic_gd(A, y, 0.5, 1))
+    ok = np.allclose(w, [0.25, -0.125]) and np.isclose(b, 0)
+    A = _rng.normal(size=(40, 3)); y = (A @ [1.0, -2.0, 0.5] > 0).astype(int); lr = float(_rng.choice([0.1, 0.5])); st = int(_rng.integers(10, 200))
+    rw, rb = np.zeros(3), 0.0
+    for _ in range(st):
+        ph = 1 / (1 + np.exp(-(A @ rw + rb))); rw = rw - lr * A.T @ (ph - y) / 40; rb = rb - lr * np.mean(ph - y)
+    w, b = logistic_gd(A, y, lr, st)
+    return bool(ok) and np.allclose(w, rw) and np.isclose(b, rb)
+
+TESTS = {1: _t2, 2: _t1, 3: _t3, 4: _t4, 5: _t5, 6: _t6}
+''',
+"07": r'''
+_rng = np.random.default_rng()
+
+def _need(x):
+    if x is None:
+        raise TypeError("'NoneType' returned")
+    return x
+
+def _t1():
+    st = [(2.5, -3.0, 3.0), (3.5, -1.1667, 3.5)]
+    ok = np.isclose(_need(gb_predict_one(5.0, st, 0.5, 3.2)), 5.91665) and np.isclose(gb_predict_one(5.0, st, 0.5, 0.5), 2.91665)
+    st = [(float(_rng.uniform(0, 10)), float(_rng.normal()), float(_rng.normal())) for _ in range(5)]; f0 = float(_rng.normal()); lr = 0.3; x = float(_rng.uniform(0, 10))
+    return bool(ok) and np.isclose(gb_predict_one(f0, st, lr, x), f0 + lr * sum(l if x <= t else r for t, l, r in st))
+
+def _t2():
+    model = [(2.5, -1, 0.549), (6.5, -1, 0.805), (4.5, 1, 0.693)]
+    ok = _need(adaboost_predict_one(model, 5.5)) == 1 and adaboost_predict_one(model, 7.0) == -1
+    m2 = [(float(_rng.uniform(0, 10)), int(_rng.choice([1, -1])), float(_rng.uniform(0.1, 1))) for _ in range(4)]
+    for x in _rng.uniform(0, 10, 6):
+        F = sum(a * (s if x > t else -s) for t, s, a in m2)
+        ok = ok and adaboost_predict_one(m2, float(x)) == (1 if F >= 0 else -1)
+    return bool(ok)
+
+def _t3():
+    C = np.array([[4 / 3, 4 / 3], [14 / 3, 10 / 3]])
+    ok = np.array_equal(_need(kmeans_predict(np.array([[3.5, 2.0], [0.0, 0.0]]), C)), [1, 0])
+    k, d = int(_rng.integers(2, 5)), int(_rng.integers(1, 4)); C = _rng.normal(size=(k, d)); X = _rng.normal(size=(10, d))
+    return bool(ok) and np.array_equal(kmeans_predict(X, C), ((X[:, None] - C[None]) ** 2).sum(2).argmin(1))
+
+def _t4():
+    ok = np.array_equal(_need(logistic_predict(np.array([[2.0, 2.0]]), np.array([0.672, 0.663]), -2.61, 0.5)), [1])
+    ok = ok and np.array_equal(logistic_predict(np.array([[2.0, 2.0]]), np.array([0.672, 0.663]), -2.61, 0.8), [0])
+    X = _rng.normal(size=(12, 3)); w = _rng.normal(size=3); b = float(_rng.normal()); t = float(_rng.uniform(0.2, 0.8))
+    return bool(ok) and np.array_equal(logistic_predict(X, w, b, t), (1 / (1 + np.exp(-(X @ w + b))) >= t).astype(int))
+
+def _t5():
+    out = _need(pca_scores(np.array([[7.0, 7.0]]), np.array([5.0, 4.0]), np.array([[0.7071, 0.7071]])))
+    ok = np.allclose(out, [[3.5355]], atol=1e-3)
+    d, k = 4, 2; m = _rng.normal(size=d); Cm = np.linalg.qr(_rng.normal(size=(d, k)))[0].T; X = _rng.normal(size=(6, d))
+    return bool(ok) and np.allclose(pca_scores(X, m, Cm), (X - m) @ Cm.T)
+
+TESTS = {i: globals()[f"_t{i}"] for i in range(1, 6)}
 ''',
 }
 

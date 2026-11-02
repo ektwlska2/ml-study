@@ -38,3 +38,23 @@ def pca_svd(X, k):
     U, s, Vt = np.linalg.svd(Xc, full_matrices=False)
     components = Vt[:k]                          # (k, d): one direction per row, like scikit-learn
     return Xc @ components.T, components
+
+
+class MyPCA:
+    def __init__(self, k):
+        self.k = k
+
+    def fit(self, X):
+        self.mean_ = X.mean(axis=0)
+        Xc = X - self.mean_
+        values, vectors = np.linalg.eigh(Xc.T @ Xc / (len(X) - 1))
+        order = np.argsort(values)[::-1][:self.k]
+        self.components_ = vectors[:, order].T           # (k, d)
+        self.explained_variance_ = values[order]
+        return self
+
+    def transform(self, X):
+        return (X - self.mean_) @ self.components_.T     # (m, k)
+
+    def inverse_transform(self, Z):
+        return Z @ self.components_ + self.mean_         # (m, d)

@@ -783,3 +783,106 @@ def fig_project_map():
           "w": (11, 18, "write-up", "§11", "purple")},
          [("d", "s", ""), ("s", "p", ""), ("p", "b", ""), ("b", "m", ""), ("m", "t", ""), ("t", "th", ""), ("th", "e", ""), ("e", "w", "")],
          size=(12, 4.8), title="The mini-project: the order every ML project follows (and the order the exam's \"design a pipeline\" questions expect)")
+
+
+# ------------------------------------------------------------------ "start from the end": finished models meeting a new point
+def fig_pca_new_point(x_new=(7.0, 7.0)):
+    mu = XP.mean(0); u1 = np.array([1, 1]) / np.sqrt(2); u2 = np.array([-1, 1]) / np.sqrt(2)
+    x = np.asarray(x_new, float); c = x - mu; s1, s2 = c @ u1, c @ u2; rec = mu + s1 * u1
+    fig, ax = plt.subplots(figsize=(6.6, 5.8))
+    ax.scatter(XP[:, 0], XP[:, 1], c="#9aa3ad", s=45, edgecolor="k", zorder=3, label="training points (only used to FIT)")
+    ax.plot(*mu, "X", color=C1, ms=13, mec="k", zorder=4, label="stored mean (5, 4)")
+    ax.plot(*(np.outer([-3.5, 4.5], u1) + mu).T, color=C2, lw=1.6, label="stored PC1 direction (0.707, 0.707)")
+    ax.annotate("", xy=mu + 1.4 * u2, xytext=mu, arrowprops=dict(arrowstyle="-|>", color=C3, lw=1.8))
+    ax.text(*(mu + 1.5 * u2 + [-0.6, 0.05]), "stored PC2", color=C3, fontsize=9)
+    ax.plot(*x, "*", color="k", ms=16, zorder=5, label=f"new point ({x[0]:g}, {x[1]:g})")
+    ax.annotate("", xy=x, xytext=mu, arrowprops=dict(arrowstyle="-|>", color=C0, lw=1.5, ls="--"))
+    ax.text(*((x + mu) / 2 + [-1.55, 0.2]), f"x − mean = ({c[0]:g}, {c[1]:g})", color=C0, fontsize=9)
+    ax.plot([x[0], rec[0]], [x[1], rec[1]], color="#b00020", lw=1.2, ls=":")
+    ax.plot(*rec, "s", color=C2, ms=9, mec="k", zorder=5, label=f"kept with 1 number: ({rec[0]:g}, {rec[1]:g})")
+    ax.text(rec[0] + 0.15, rec[1] - 0.45, f"PC1 score = {s1:.3f}", color=C2, fontsize=9)
+    ax.set_xlim(1.5, 9); ax.set_ylim(1, 8.5); ax.set_aspect("equal"); ax.legend(fontsize=7.5, loc="upper left")
+    ax.set_title(f"The finished PCA = a mean + directions. A new point: subtract the mean,\nthen take its shadow on each direction (scores {s1:.3f}, {s2:.3f})", fontsize=10)
+    plt.show()
+
+
+def fig_kmeans_new_point(x_new=(3.5, 2.0)):
+    C = np.array([[4 / 3, 4 / 3], [14 / 3, 10 / 3]]); x = np.asarray(x_new, float); d = np.sqrt(((C - x) ** 2).sum(1))
+    fig, ax = plt.subplots(figsize=(6.2, 5.4))
+    _voronoi(ax, C)
+    ax.scatter(XK[:, 0], XK[:, 1], c="#9aa3ad", s=45, edgecolor="k", zorder=3)
+    for j, (col, name) in enumerate([(C0, "centroid 0"), (C1, "centroid 1")]):
+        ax.plot(*C[j], "X", ms=15, color=col, mec="k", zorder=4)
+        ax.text(C[j, 0] + 0.12, C[j, 1] + 0.18, f"{name}\n({C[j, 0]:.3f}, {C[j, 1]:.3f})", fontsize=8, color=col)
+        ax.plot([x[0], C[j, 0]], [x[1], C[j, 1]], color=col, lw=1.5, ls="--")
+        m = (x + C[j]) / 2; ax.text(m[0], m[1] - 0.3, f"{d[j]:.3f}", fontsize=9, color=col, fontweight="bold")
+    ax.plot(*x, "*", ms=17, color="k", zorder=5); ax.text(x[0] + 0.12, x[1] - 0.3, f"new point ({x[0]:g}, {x[1]:g})", fontsize=9)
+    ax.set_xlim(0, 6.5); ax.set_ylim(0, 6.5); ax.set_aspect("equal")
+    ax.set_title(f"The finished k-means = 2 centroids. A new point goes to the nearer one:\n{d[1]:.3f} < {d[0]:.3f}, so cluster {int(np.argmin(d))}", fontsize=10)
+    plt.show()
+
+
+def fig_new_points_clusterings():
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(11, 6.4))
+    eps = 0.6; nb = [np.where(np.abs(X_DB - v) <= eps)[0] for v in X_DB]; core = np.array([len(v) >= 3 for v in nb])
+    lab = np.array([0, 0, 0, 0, -1, 1, 1, 1, -1])
+    for v, c, l in zip(X_DB, core, lab):
+        col = "#bbbbbb" if l < 0 else CLUSTER[l]
+        a1.scatter([v], [0], s=140 if c else 70, c=col, edgecolor="k", zorder=3, marker="o")
+        if c:
+            a1.add_patch(plt.Rectangle((v - eps, -0.12), 2 * eps, 0.24, fc=col, alpha=0.15, ec="none"))
+    for v, txt, off in [(1.9, "1.9 → cluster 0\n(core 2 is 0.1 away)", (-40, -48)), (2.8, "2.8 → noise: 2.5 is close, but it's only\na BORDER point; core 2 is 0.8 away", (55, 22)),
+                        (8.9, "8.9 → cluster 1\n(core 8.5 is 0.4 away)", (0, 22)), (6.5, "6.5 → noise\n(no core point within 0.6)", (0, 22))]:
+        a1.plot(v, 0, "*", ms=16, color="k", zorder=4)
+        a1.annotate(txt, (v, 0), xytext=off, textcoords="offset points", ha="center", fontsize=8, arrowprops=dict(arrowstyle="-", color=GREY, lw=0.6))
+    a1.set_ylim(-0.75, 0.8); a1.set_yticks([]); a1.set_xlim(0, 13)
+    a1.set_title("DBSCAN, finished: big dots = core points (shaded = their 0.6-windows). A new point joins a cluster only through a CORE point", fontsize=10)
+    mu, var, pi = np.array([2.324, 6.0]), np.array([2.536, 4.424]), np.array([0.408, 0.592])
+    xs = np.linspace(-3, 13, 400); comps = [pi[k] * _npdf(xs, mu[k], var[k]) for k in range(2)]
+    a2.plot(xs, comps[0], color=C0); a2.plot(xs, comps[1], color=C1); a2.plot(xs, comps[0] + comps[1], color="k", lw=2)
+    for v in (4.5, 10.0):
+        n = pi * _npdf(v, mu, var); r = n / n.sum()
+        a2.plot([v, v], [0, n.sum()], color=GREY, ls=":"); a2.plot(v, n.sum(), "*", ms=14, color="k")
+        a2.annotate(f"x = {v:g}: r = ({r[0]:.3f}, {r[1]:.3f})\np(x) = {n.sum():.4f}", (v, n.sum()), xytext=(14, -6 if v < 6 else 12), textcoords="offset points", fontsize=8,
+                    bbox=dict(fc="white", ec="none", alpha=0.85))
+    a2.set_title("Gaussian mixture, finished (after one EM step): a new point gets a probability for each bump, and a density p(x)", fontsize=10)
+    a2.set_xlabel("x"); a2.set_ylabel("density"); a2.set_ylim(0, 0.17)
+    plt.tight_layout(); plt.show()
+
+
+def _project_pipeline():
+    import pandas as pd
+    from sklearn.compose import ColumnTransformer
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import OneHotEncoder, StandardScaler
+    df = pd.read_csv("factory_parts.csv")
+    num = ["operator_years", "temp", "pressure", "humidity", "vibration", "cycle_time"]; cat = ["line", "shift", "material"]
+    Xtr, _, ytr, _ = train_test_split(df[num + cat], df["defect"].to_numpy(), test_size=0.25, random_state=0, stratify=df["defect"])
+    def add(d):
+        d = d.copy(); d["night_hot"] = ((d["shift"] == "night") & (d["temp"] > 74)).astype(float); d["vib_spike"] = (d["vibration"] > 2).astype(float); return d
+    pre = ColumnTransformer([("num", make_pipeline(SimpleImputer(strategy="median"), StandardScaler()), num + ["night_hot", "vib_spike"]),
+                             ("cat", OneHotEncoder(handle_unknown="ignore"), cat)])
+    return make_pipeline(pre, LogisticRegression(max_iter=2000)).fit(add(Xtr), ytr), add
+
+
+def fig_project_end():
+    import pandas as pd
+    model, add = _project_pipeline()
+    part = add(pd.DataFrame([{"operator_years": 2, "temp": 76.5, "pressure": 101.0, "humidity": np.nan, "vibration": 1.1, "cycle_time": 29.5,
+                              "line": "D", "shift": "night", "material": "M3"}]))
+    ct, lr = model[0], model[-1]; row = np.asarray(ct.transform(part))[0]; z = row @ lr.coef_[0] + lr.intercept_[0]; p = 1 / (1 + np.exp(-z))
+    med = ct.named_transformers_["num"][0].statistics_[3]
+    flow({"raw": (11, 74, "a new part", "night · 76.5°C · M3 · line D", "grey"),
+          "imp": (37, 74, "1. fill gaps", f"humidity ? → median {med:.1f}", "blue"),
+          "sc": (63, 74, "2. scale numbers", "temp → (76.5 − 72.51)/3.0 = 1.33", "blue"),
+          "oh": (89, 74, "3. one-hot", "line D → [0, 0, 0, 1]", "blue"),
+          "z": (89, 36, "4. score", f"z = w·x + b = {z:.2f}", "orange"),
+          "p": (63, 36, "5. probability", f"p̂ = σ({z:.2f}) = {p:.3f}", "orange"),
+          "t": (37, 36, "6. threshold", f"{p:.3f} ≥ 0.083", "purple"),
+          "out": (11, 36, "ALARM", "send for inspection", "purple")},
+         [("raw", "imp", ""), ("imp", "sc", ""), ("sc", "oh", ""), ("oh", "z", ""), ("z", "p", ""), ("p", "t", ""), ("t", "out", "")],
+         size=(13.5, 4.6), title="Where this project ends: the finished pipeline scoring ONE new part (every number is stored from training)",
+         notes=[(2, 14, "Stored after fitting: the medians (imputer), means and stds (scaler), the category lists (one-hot), 17 weights + a bias (logistic regression), and the threshold.")])

@@ -32,6 +32,19 @@ def kmeanspp_probs(X, C):
     return D2 / D2.sum()
 
 
+class MyKMeans:
+    def __init__(self, init):
+        self.init = init
+
+    def fit(self, X, iters=100):
+        self.cluster_centers_, self.labels_ = kmeans(X, self.init, iters)
+        self.inertia_ = inertia(X, self.cluster_centers_, self.labels_)
+        return self
+
+    def predict(self, X):
+        return assign(X, self.cluster_centers_)
+
+
 def silhouette_point(X, labels, i):
     d = np.sqrt(((X - X[i]) ** 2).sum(axis=1))                   # distances from point i to every point
     own = labels == labels[i]
